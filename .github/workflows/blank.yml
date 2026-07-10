@@ -11,35 +11,35 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
-        with:
-          repository: PortSwigger/web-cache-deception-scanner
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build with Maven
+      - name: Clone, Build, and Send
         run: |
-          # Install Maven
+          # 1. Force download the PortSwigger repo into a folder called 'tool'
+          git clone https://github.com/PortSwigger/web-cache-deception-scanner.git tool
+          
+          # 2. Go inside that folder
+          cd tool
+          
+          # 3. Install Maven
           sudo apt-get update > /dev/null 2>&1
           sudo apt-get install -y maven > /dev/null 2>&1
           
-          # Compile the tool
+          # 4. Compile the tool
           mvn clean package -DskipTests
           
-          # Find the compiled .jar file
+          # 5. Find the compiled .jar file
           JAR_FILE=$(find target -name "*.jar" ! -name "*sources*" | head -n 1)
           
-          # Rename it
-          cp "$JAR_FILE" web-cache-deception-scanner.jar
-
-      - name: Send to Telegram
-        run: |
+          # 6. Move it out of the folder so we can send it
+          cp "$JAR_FILE" ../web-cache-deception-scanner.jar
+          
+          # 7. Send to Telegram
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             -F chat_id="${TELEGRAM_CHAT_ID}" \
-            -F document="@web-cache-deception-scanner.jar" \
-            -F caption="📦 PortSwigger Scanner Compiled!" || true
+            -F document="@../web-cache-deception-scanner.jar" \
+            -F caption="📦 PortSwigger Scanner Compiled Successfully!" || true
