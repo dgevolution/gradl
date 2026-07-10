@@ -1,62 +1,45 @@
-name: Build & Send PortSwigger Tool
+name: Build PortSwigger Tool
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-and-send:
+  build:
     runs-on: ubuntu-latest
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     
     steps:
-      - name: Checkout PortSwigger Repo
+      - name: Checkout Repo
         uses: actions/checkout@v4
         with:
           repository: PortSwigger/web-cache-deception-scanner
 
-      - name: Set up JDK 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build with Gradle
+      - name: Build with Maven
         run: |
-          # Make gradle executable
-          chmod +x gradlew
+          # Install Maven
+          sudo apt-get update > /dev/null 2>&1
+          sudo apt-get install -y maven > /dev/null 2>&1
           
-          # Build the tool. 
-          # We use '-x test' to skip running the internal unit tests to save about 2 minutes of build time
-          ./gradlew build -x test
+          # Compile the tool
+          mvn clean package -DskipTests
           
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=🛠️ Gradle build completed. Extracting the .jar file..." || true
-
-      - name: Extract JAR and Send to Telegram
-        run: |
-          # Find the compiled .jar file. 
-          # We use '! -name "*plain*"' to skip the plain source jar and grab the fat/compiled jar.
-          JAR_FILE=$(find build/libs -name "*.jar" ! -name "*plain*" | head -n 1)
+          # Find the compiled .jar file
+          JAR_FILE=$(find target -name "*.jar" ! -name "*sources*" | head -n 1)
           
-          if [ -z "$JAR_FILE" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -d chat_id="${TELEGRAM_CHAT_ID}" \
-              --data-urlencode "text=❌ ERROR: Could not find the compiled .jar file." || true
-            exit 1
-          fi
-          
-          # Rename it to something clean
+          # Rename it
           cp "$JAR_FILE" web-cache-deception-scanner.jar
-          
-          # Send the compiled tool directly to your Telegram
+
+      - name: Send to Telegram
+        run: |
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             -F chat_id="${TELEGRAM_CHAT_ID}" \
             -F document="@web-cache-deception-scanner.jar" \
-            -F caption="📦 PortSwigger Web Cache Deception Scanner - Ready to use!" || true
-            
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=✅ Done! You can now run it locally using:\njava -jar web-cache-deception-scanner.jar -u https://target.com" || true
+            -F caption="📦 PortSwigger Scanner Compiled!" || true
